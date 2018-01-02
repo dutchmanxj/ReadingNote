@@ -19,4 +19,53 @@ APNs还提供了合并多调通知的功能。具体的操作方法是在发送H
 为了保证APNs服务的可靠性，APNs强制使用端到端服务，加密验证以及双层认证。
 双层认证分别为：
 * 连接认证
+    * Provider-APNs连接认证：
+
+        Provider和APNs想建立可靠连接，需要Provider遵循SSL证书或者token授权证书。这两种证书都可以在[Apple开发者](https://developer.apple.com/account/)官网上进行申请。
+    * APNs-设备连接认证：
+
+        设备的token信息是一个封闭的NSData数据，只有APNs可以解析其内容。每一个APP在注册到APNs的时候都会获得一个唯一的token用于通信，在之后的每一次推送通知的请求中都需要携带这个token作为标志。
+
 * 设备令牌认证
+
+    ###  
+
+    ### Provider-APNs可靠性
+
+    Provider与APNs之间的通信可靠性可以用两种方案来实现。分别是基于token的连接认证和基于证书的连接认证。
+    ### 1. 基于token的连接认证
+    ![img](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/service_provider_ct_2x.png)
+    简单解释下上图中的通信流程：
+    1. Provider通过TLS向APNs请求建立一个安全可靠的链接；
+
+    2. APNs返回给Provider一个APNs证书，标识该Provider是有效的。到这一步为止，连接已经建立完成；
+
+    3. Provider发送通知推送请求，请求里面需要携带token；
+
+    4. APNs验证Provider发送过来的token，回应推送请求。
+
+### 2. 基于证书的连接认证
+![certificate](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/service_provider_ct_certificate_2x.png)
+​	
+大致的流程：
+1.  Provider通过TLS向APNs请求建立一个安全可靠的链接;
+2.  APNs返回一个证书，连接建立完成；
+3.  Provider发送一个_Apple-provisioned provider certificate_(可以通过开发者网站申请)给APNs；
+4.  APNs对发过来的_Apple-provisioned provider certificate_进行验证，确定跟APNs通信的Provider是可靠有效的，因此建立连接。
+
+
+### APNs-设备连接认证与设备token
+需要注意的一点是：APNs和每一个设备的认真连接是自动建立的。每一个设备都一份属于自己的加密证书和一个私钥。通信流程大致如下图所示：
+![device-APNs](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/service_device_ct_2x.png)
+建立的流程比较简单，就不在赘述了。在TLS连接建立完成后。在当前设备上所有的APP都能够通过注册到APNs的方式来获取属于当前APP的特定token用于远端推送通知。在获取到设备token之后，APP需要将获得的Token发送给相关的Provider。Provider(通知后台)需要token来跟APNs和目标设备通信。
+token在三端之间的传递流程如下图所示：
+![token-forward](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/token_generation_2x.png)
+1. 首先将APP注册到APNs上。如果当前的APP已经注册过，并且APP对应的Token没有发生改变的话，系统会快速返回之前的Token并直接跳到第4步。
+2. 如果需要新创建一个设备Token，APNs通过设备的证书里面包含信息生成一个新的Token。然后将其发送给对应的设备。
+3. 通过代码获取到APP对应的Token，调用
+  ​     ``` application:didRegisterForRemoteNotificationsWithDeviceToken: ```
+4. APP将拿到的Token通过HTTP请求发送给Provider
+
+
+在整个消息推送流程中Provider到设备的路径
+![provider-device](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/token_trust_2x.png)
