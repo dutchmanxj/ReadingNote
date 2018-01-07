@@ -61,11 +61,126 @@ APNs还提供了合并多调通知的功能。具体的操作方法是在发送H
 token在三端之间的传递流程如下图所示：
 ![token-forward](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/token_generation_2x.png)
 1. 首先将APP注册到APNs上。如果当前的APP已经注册过，并且APP对应的Token没有发生改变的话，系统会快速返回之前的Token并直接跳到第4步。
+
 2. 如果需要新创建一个设备Token，APNs通过设备的证书里面包含信息生成一个新的Token。然后将其发送给对应的设备。
+
 3. 通过代码获取到APP对应的Token，调用
-  ​     ``` application:didRegisterForRemoteNotificationsWithDeviceToken: ```
+
+  ```objective-c
+  - (void)application:(NSApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken;
+  ```
+
 4. APP将拿到的Token通过HTTP请求发送给Provider
 
 
 在整个消息推送流程中Provider到设备的路径
 ![provider-device](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/token_trust_2x.png)
+
+
+
+
+
+# 远端通知具体内容
+
+每一个远端通知都有一个保存的内容的负载，其负载大小的容量随通知的类型而定。
+
+系统要求是通常类型的通知内容，大小不能超过4KB；语音形式的内容(VoIP)，大小不能超过5KB。
+
+(如果发送的请求消息体容量超过限制，APNs会拒绝接受这条通知。此外，通知消息本身是不会有保护或者加密措施的，因此关于客户的敏感信息最好不要放在推送通知里面进行传递。）
+
+
+
+## 一个典型的通知内容JSON
+
+```json
+{
+    "aps" : { "alert" : "Message received from Bob" },
+    "acme2" : [ "bang",  "whiz" ]
+}
+//aps字段是通知中最重要的字段，该字段用于确定接收通知的系统该如何提醒用户。
+//acme2里面存放的是自定义数据。
+```
+
+下面是一个复杂一点的通知体
+
+```json
+{
+    "aps" : {
+        "alert" : "You got your emails.",  	//通知的title
+        "badge" : 9,					   //将APP的icon右上角的红色提醒标记为9
+        "sound" : "bingbong.aiff"			//播放名为bingbong的提示音
+    },
+    "acme1" : "bar",
+    "acme2" : 42
+}
+```
+
+
+
+###构筑一个后台更新通知
+
+后台更新通知通过定期唤醒您的应用程序，以便在后台刷新其数据，从而改善用户体验。这种后台通知既可以显示的提醒用户，也可以静默地在后台完成工作。那么如何使用这种通知呢？
+
+具体的做法是：
+
+1.  在aps字段中添加content-available字段，并且设置其值为1;
+
+2. 系统在接到后台通知后，会通过`application:didReceiveRemoteNotification:fetchCompletionHandler:`通知APP。使用该方法来进行界面的更新操作。
+
+3. 在后台处理远程通知需要开发者将相应的背景模式添加到APP的配置中：
+
+   * 选中工程文件；
+
+   * 选中对应的Target；
+
+   * 选中Capabilities选项；
+
+   * 打开Background Modes；
+
+   * 选中 Remote notification模式；
+
+     ![img](https://developer.apple.com/library/content/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Art/remote_notification_mode_2x.png)
+
+背景通知的范例：
+
+```JSON
+{
+    "aps" : {
+        "content-available" : 1
+    },
+    "acme1" : "bar",
+    "acme2" : 42
+}
+```
+
+
+
+### 本地化远端通知(多语言问题)
+
+本地化远端通知有两种方式：
+
+1. 从后台服务器上提供本地化的内容；
+2. 在APP bundle里面存放一个本地化字符串；
+
+其中第一条比较简单，就不多做解释了，就是语言问题放在服务器后台去处理。
+
+第二种简单介绍下，在本地创建一个 `Localizable.strings`文件，比如写上这么一句：
+
+```objective-c
+GAME_PLAY_REQUEST_FORMAT" = "%@ and %@ have invited you to play Monopoly";
+```
+
+搭配下面这个通知体：
+
+```json{     &quot;aps&quot; : {         &quot;alert&quot; : {             &quot;loc-key&quot; : &quot;GAME_PLAY_REQUEST_FORMAT&quot;,             &quot;loc-args&quot; : [ &quot;Jenna&quot;, &quot;Frank&quot;]         }     } }
+{
+    "aps" : {
+        "alert" : {
+            "loc-key" : "GAME_PLAY_REQUEST_FORMAT",
+            "loc-args" : [ "Jenna", "Frank"]
+        }
+    }
+}//会根据loc-key来找到对应的本地文案进行替换。
+```
+
+就能够实现远端通知搭配本地保存的Strings进行最终显示。
