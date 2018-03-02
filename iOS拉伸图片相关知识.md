@@ -1,0 +1,3 @@
+iOS的2x，3x图像素是不一样的
+
+拉伸图片的时候，函数resizableImageWithCapInsets：里面穿的CapInsets应该是1x像素的结果，2x和3x图量出来的比例需要除以对应的图片比例。
